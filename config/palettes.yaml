@@ -1,0 +1,7 @@
+default: intwin
+palettes:
+  intwin:
+    primary: "#1F4E79"
+    secondary: "#5B9BD5"
+    accent: "#C55A11"
+    neutral: "#7F7F7F"

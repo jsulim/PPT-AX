@@ -1,4 +1,136 @@
-# 인트윈 제안 자동화 플랫폼 기획서 v0.1
+# 인트윈 제안 자동화 플랫폼 기획서 v0.2
+
+## 0. v0.2 방향 전환 요약
+
+이 문서의 기존 v0.1 내용은 “과거 PPT 장표를 슬라이드 단위로 분해·라벨링·검색해서 새 제안서에 합치는 장표 라이브러리”를 1차 목표로 삼았다.
+v0.2부터 1차 목표는 다음과 같이 바뀐다.
+
+> 공고문·과업지시서와 입찰서식/사업 카드의 확정 정보를 바탕으로, 사람이 고른 기존 제안서 PPTX 템플릿의 디자인은 그대로 두고 텍스트만 바꿔 새 제안서 초안을 만든다.
+
+따라서 이 섹션이 아래 v0.1 내용과 충돌할 때는 이 섹션을 우선한다.
+
+### v0.2 핵심 원칙
+
+1. AI는 슬라이드 디자인, 아이콘, 도식, 레이아웃, 색 조합을 새로 만들지 않는다.
+2. AI는 PPTX 안에서 추출된 텍스트 슬롯(텍스트 박스, 표 셀, 노트 등)의 글만 바꾼다.
+3. 새 제안서 텍스트의 근거는 공고문/과업지시서, 사업 카드, 입찰서식/HWPX 기반 정보, 회사 DB다.
+4. 금액, 날짜, 기관명, 인력, 수행 실적처럼 사실 정보는 AI가 만들지 않는다. 근거가 없으면 `[확인 필요]`로 둔다.
+5. 사실 슬롯(사업명, 기관명, 기간, 참여 인력, 수행 실적 등)은 AI가 문장을 쓰지 않고 필드 연결만 제안한다. 실제 값은 코드가 `bid_context`·`project_card`·DB에서 그대로 치환한다.
+6. 서술 슬롯(추진전략, 수행방법, 기대효과 등)만 AI가 문장을 쓴다. 출력 후 숫자, 날짜, 고유명사가 입력 근거 안에 있는지 자동 검사한다.
+7. 공고문·과업지시서·배점표는 자유 요약보다 요구사항 번호, 출처, 배점 항목 목록으로 저장한다.
+8. 템플릿 PPT는 완성된 제안서 한 벌이 아니라 장표 유형 모음으로 본다. 배점표 항목별로 어떤 유형을 몇 장 쓸지 `outline`을 먼저 정하고 슬롯을 채운다.
+9. 기존 장표 라이브러리, 유사 과업 검색, 여러 PPT 합치기는 후순위 확장 기능이다. 장표 라이브러리는 나중에 `outline` 단계에서 배점표 항목에 맞는 장표 유형을 추천하는 기능으로 이어진다.
+
+### v0.2 MVP 흐름
+
+1. 사용자가 공고문/과업지시서 텍스트 또는 파일을 넣는다.
+2. 사업 카드에 기관명, 사업명, 기간, 분야 등 확정 정보를 입력한다.
+3. 입찰서식 기반 정보 또는 간단한 입찰정보 폼을 입력한다.
+4. 사용자가 기존 제안서 PPTX를 템플릿으로 선택한다.
+5. 시스템이 PPTX의 텍스트 슬롯을 추출하고, 디자이너/사용자가 템플릿당 한 번 슬롯 이름과 유형(`fact`/`narrative`/`fixed`)을 확정한다.
+6. 사용자가 배점표 항목별 개요(`outline`: 항목 → 장표 유형 → 장 수)를 정한다. M1에서는 사람이 입력하고, 이후 AI/라이브러리 추천으로 확장한다.
+7. AI가 공고문 요구사항과 입찰정보를 바탕으로 사실 슬롯의 필드 연결과 서술 슬롯의 텍스트 교체안을 만든다.
+8. 사람이 교체안과 필드 연결을 확인·수정한다.
+9. 원본 템플릿 복사본에 확정 텍스트만 적용한다. 사실 슬롯은 코드가 JSON 값을 그대로 넣고, 서술 슬롯은 확정 문장을 적용해서 `data/outputs/`에 새 PPTX를 만든다.
+10. 잔존 기관명·지역명·사업명, 새로 생긴 숫자·날짜·고유명사, 요구사항 누락, 금지 표현, `[확인 필요]`, 넘침 위험을 리포트한다.
+
+### v0.2 데이터 모델 추가/변경
+
+기존 `projects`, `documents`, `jobs`, `ai_calls`, `usage_events`는 유지한다. 아래 개념을 우선 추가한다.
+
+```
+notice_contexts
+  project_id
+  source_document_id
+  raw_text
+  requirements            jsonb: [{req_id, title, detail, source_page, source_text, scoring_item_key}]
+  scoring_items           jsonb: [{key, name, points, source_page}]
+  summary                 jsonb: 보조 정보. 자유 요약은 요구사항 목록을 대체하지 않는다.
+  status                  draft | confirmed
+
+bid_contexts
+  project_id
+  source_document_id
+  data                    jsonb: 회사 일반 현황, 참여 인력, 수행 실적, 입찰서식 값
+  status                  draft | confirmed
+
+templates
+  project_id
+  document_id
+  name
+  status                  pending | analyzed | failed
+  slide_count
+  preview_path
+
+template_text_slots
+  template_id
+  slide_index
+  shape_id
+  kind                    text_box | table_cell | placeholder | notes
+  role_key                cover_title | background | strategy | method | schedule | company | unknown
+  slot_name               사람이 붙인 안정적인 이름. 예: slot_project_name, slot_strategy_body
+  value_type              fact | narrative | fixed
+  field_binding           fact 슬롯일 때 연결할 JSON 경로. 예: project_card.name, bid_context.personnel[0].name
+  original_text
+  char_count
+  max_char_count          원래 글자 수와 슬롯 크기 기반 권장 상한
+  bounds                  jsonb: {x, y, w, h}
+  style_ref               jsonb
+  locked
+
+outlines
+  project_id
+  template_id
+  status                  draft | confirmed
+  items                   jsonb: [{scoring_item_key, slide_type_key, slide_count, requirement_ids, template_slide_refs}]
+
+generated_decks
+  project_id
+  template_id
+  outline_id
+  title
+  status                  draft | generating | review | building | ready | failed
+  output_path
+  report                  jsonb
+
+deck_text_rewrites
+  deck_id
+  slot_id
+  value_type              fact | narrative | fixed
+  field_binding
+  original_text
+  suggested_text
+  final_text
+  requirement_ids         이 슬롯/장표가 다루는 요구사항
+  status                  pending | accepted | edited | rejected | failed
+  warnings                jsonb
+```
+
+### v0.2 마일스톤 개요
+
+| 단계 | 내용 | 수준 | 마일스톤 |
+| --- | --- | --- | --- |
+| P1 | 템플릿 기반 PPT 생성: 공고/과업 입력, 사업 카드, 입찰정보, PPTX 텍스트 슬롯 추출, AI 텍스트 교체, 검증, 새 PPTX 출력 | 실사용 | M0~M7 |
+| P2 | 입찰서식(HWPX) 채우기와 PPT 생성 입력으로 재사용 | 실사용 | M8~M9 |
+| P3 | 템플릿/과거 자료 검색, 유사 과업 추천, 별표 | 실사용 | M10 |
+| P4 | 나라장터 공고 탐색·추천, 구글 드라이브·로그인, 사무실 PC 배포 | 데모/운영 | M11~M12 |
+
+### v0.2 화면 개요
+
+| 경로 | 내용 |
+| --- | --- |
+| `/projects` | 사업 카드 목록·필터, 새 카드 만들기 |
+| `/projects/[id]` | 카드 상세: 정보 편집, 입력 자료, 템플릿, 생성 결과 |
+| `/projects/[id]/inputs` | 공고문·과업지시서·입찰정보 입력/확인 |
+| `/templates` | 템플릿 PPTX 목록, 업로드, 분석 상태, 미리보기 |
+| `/decks/[id]/rewrite` | 텍스트 교체안 확인·수정 |
+| `/decks/[id]` | 생성 상태, 리포트, 다운로드 |
+| `/forms` | HWPX 서식 채우기 |
+| `/company` | 회사 데이터(인력, 실적) 입력 |
+
+---
+
+## 아래 내용은 v0.1 원문이며, v0.2 섹션과 충돌하면 v0.2를 우선한다.
 
 작성 기준일: 2026-10-01
 대상 독자: 개발자, 코딩 에이전트(Claude Code, Codex), 제안 실무 담당자

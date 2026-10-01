@@ -1,0 +1,9 @@
+rules:
+  include_keywords: []
+  exclude_keywords: []
+  regions: []
+  amount_krw:
+    min:
+    max:
+  min_days_left:
+  weights: {}

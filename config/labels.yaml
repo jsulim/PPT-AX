@@ -1,0 +1,43 @@
+version: 2
+value_types:
+  - {key: fact, name: 확정 사실}
+  - {key: narrative, name: 서술 문장}
+  - {key: fixed, name: 고정 문구}
+  - {key: unknown, name: 미분류}
+slot_roles:
+  - {key: cover_title, name: 표지 제목}
+  - {key: cover_subtitle, name: 표지 부제}
+  - {key: background, name: 사업 배경}
+  - {key: understanding, name: 사업 이해}
+  - {key: strategy, name: 추진 전략}
+  - {key: kpi, name: 성과목표}
+  - {key: method, name: 수행 방법}
+  - {key: organization, name: 추진 체계}
+  - {key: schedule, name: 추진 일정}
+  - {key: quality, name: 품질·보안·위험 관리}
+  - {key: effect, name: 기대효과}
+  - {key: company, name: 회사 소개·수행 실적}
+  - {key: fixed_footer, name: 고정 푸터}
+  - {key: page_number, name: 페이지 번호}
+  - {key: unknown, name: 미분류}
+slide_types:
+  - {key: cover, name: 표지}
+  - {key: divider, name: 간지}
+  - {key: requirement_response, name: 요구사항 대응}
+  - {key: background_analysis, name: 현황·배경 분석}
+  - {key: strategy_overview, name: 추진전략 개요}
+  - {key: method_detail, name: 수행방법 상세}
+  - {key: organization, name: 추진체계}
+  - {key: schedule, name: 추진일정}
+  - {key: kpi, name: 성과목표}
+  - {key: quality_risk, name: 품질·위험 관리}
+  - {key: track_record, name: 수행실적}
+  - {key: company_profile, name: 회사 소개}
+  - {key: appendix, name: 부록}
+  - {key: unknown, name: 미분류}
+domains:
+  - {key: tourism, name: 관광}
+  - {key: culture, name: 문화}
+  - {key: policy, name: 정책 연구}
+  - {key: survey, name: 실태 조사}
+  - {key: other, name: 기타}
