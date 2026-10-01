@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const samplePayload = {
   bid: {
@@ -46,13 +46,13 @@ export default function WorkProveIntegrationPage() {
     [],
   );
 
-  async function submitPayload() {
+  const submitImportedPayload = useCallback(async (nextPayload: string) => {
     setLoading(true);
     setError("");
     setResult(null);
 
     try {
-      const parsed = JSON.parse(payload) as unknown;
+      const parsed = JSON.parse(nextPayload) as unknown;
       const response = await fetch(`${apiBaseUrl}/integrations/work-prove/import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,7 +68,32 @@ export default function WorkProveIntegrationPage() {
     } finally {
       setLoading(false);
     }
+  }, [apiBaseUrl]);
+
+  async function submitPayload() {
+    await submitImportedPayload(payload);
   }
+
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const hashPayload = hash.get("payload");
+    if (!hashPayload) {
+      return;
+    }
+
+    try {
+      const decoded = decodeURIComponent(hashPayload);
+      const pretty = JSON.stringify(JSON.parse(decoded), null, 2);
+      setPayload(pretty);
+      if (hash.get("auto") === "1") {
+        window.setTimeout(() => {
+          void submitImportedPayload(pretty);
+        }, 100);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "전달받은 JSON 형식을 확인해주세요.");
+    }
+  }, [submitImportedPayload]);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-6 py-10">
