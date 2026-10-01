@@ -39,6 +39,14 @@ def list_projects(db: Annotated[Session, Depends(get_db)]) -> list[Project]:
     return list(db.scalars(select(Project).order_by(Project.created_at.desc())).all())
 
 
+@router.get("/projects/{project_id}", response_model=ProjectRead)
+def get_project(project_id: uuid.UUID, db: Annotated[Session, Depends(get_db)]) -> Project:
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="사업 카드를 찾을 수 없습니다.")
+    return project
+
+
 @router.post("/templates", response_model=TemplateRead, status_code=201)
 def upload_template(
     db: Annotated[Session, Depends(get_db)],

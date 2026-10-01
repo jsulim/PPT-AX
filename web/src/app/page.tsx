@@ -14,6 +14,12 @@ export default async function Home() {
       <header className="flex flex-col gap-2">
         <p className="text-sm font-medium text-slate-500">인트윈 제안 자동화 플랫폼</p>
         <h1 className="text-3xl font-semibold tracking-normal text-slate-950">PPT AX</h1>
+        <a
+          className="w-fit text-sm font-medium text-slate-700 underline underline-offset-4"
+          href="/integrations/work-prove"
+        >
+          입찰자동화 데이터 가져오기
+        </a>
       </header>
 
       <section className="flex flex-col gap-4">
