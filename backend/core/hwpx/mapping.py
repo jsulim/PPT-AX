@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 from core.hwpx.read import HwpxCell, HwpxDocument
 
@@ -22,7 +23,7 @@ FIELD_LABELS: dict[str, tuple[str, ...]] = {
     "company.address": ("주소", "소재지", "본사"),
     "company.phone": ("전화", "연락처", "대표전화"),
     "company.email": ("이메일", "전자우편", "e-mail"),
-    "bid.name": ("공고명", "사업명", "용역명", "건명"),
+    "bid.name": ("공고명", "사업명", "용역명", "건명", "프로젝트명"),
     "bid.no": ("공고번호", "입찰공고번호"),
     "bid.noticeOrg": ("발주기관", "공고기관"),
     "bid.demandOrg": ("수요기관", "기관명"),
@@ -66,7 +67,7 @@ def match_field_key(label: str) -> str | None:
         return None
     for field_key, aliases in FIELD_LABELS.items():
         for alias in aliases:
-            if _normalize_label(alias) in normalized:
+            if _is_label_match(normalized, _normalize_label(alias)):
                 return field_key
     return None
 
@@ -83,3 +84,15 @@ def _target_cell(row: list[HwpxCell], label_index: int) -> HwpxCell | None:
 
 def _normalize_label(value: str) -> str:
     return re.sub(r"[^0-9a-zA-Z가-힣]", "", value).lower()
+
+
+def _is_label_match(label: str, alias: str) -> bool:
+    if not label or not alias:
+        return False
+    if alias in label:
+        return True
+    if len(label) >= 3 and label in alias:
+        return True
+    if len(label) < 3 or len(alias) < 3:
+        return False
+    return SequenceMatcher(None, label, alias).ratio() >= 0.72

@@ -174,7 +174,103 @@ def test_fill_repeating_track_records_personnel_and_consent(tmp_path: Path) -> N
     assert len(report.filled) >= 8
 
 
-def _write_hwpx(path: Path) -> None:
+def test_fuzzy_label_and_header_matching(tmp_path: Path) -> None:
+    input_path = tmp_path / "fuzzy.hwpx"
+    output_path = tmp_path / "filled.hwpx"
+    _write_hwpx(input_path, FUZZY_SECTION_XML)
+
+    document = read_hwpx(input_path)
+    mappings = infer_label_mappings(document)
+    fills, missing = build_cell_fills(
+        mappings,
+        {
+            "company": {"name": "인트윈"},
+            "bid": {"name": "지역 관광 활성화 운영 용역"},
+        },
+    )
+    table_rows, repeated_tables, repeat_missing = build_repeating_fills(
+        document,
+        {
+            "track_records": [
+                {
+                    "taskName": "로컬 브랜드 캠페인",
+                    "org": "C군",
+                    "amountRaw": "30,000,000",
+                    "desc": "홍보 콘텐츠 제작",
+                }
+            ],
+            "personnel": [
+                {"name": "최전략", "dept": "사업팀", "position": "총괄", "career": "10년"}
+            ],
+        },
+    )
+
+    report = fill_hwpx_cells(
+        input_path,
+        output_path,
+        fills,
+        table_rows=table_rows,
+        repeated_tables=repeated_tables,
+    )
+    filled = read_hwpx(output_path)
+
+    assert not missing
+    assert not repeat_missing
+    assert "인트윈" in filled.text
+    assert "지역 관광 활성화 운영 용역" in filled.text
+    assert "로컬 브랜드 캠페인" in filled.text
+    assert "홍보 콘텐츠 제작" in filled.text
+    assert "최전략" in filled.text
+    assert "총괄" in filled.text
+    assert report.filled
+
+
+
+FUZZY_SECTION_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<hp:sec xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+  <hp:tbl>
+    <hp:tr>
+      <hp:tc><hp:p><hp:run><hp:t>법 인 명</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+    </hp:tr>
+    <hp:tr>
+      <hp:tc><hp:p><hp:run><hp:t>프로젝트명</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+    </hp:tr>
+  </hp:tbl>
+  <hp:tbl>
+    <hp:tr>
+      <hp:tc><hp:p><hp:run><hp:t>순번</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t>프로젝트명</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t>기관</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t>사업비</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t>수행내용</hp:t></hp:run></hp:p></hp:tc>
+    </hp:tr>
+    <hp:tr>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+    </hp:tr>
+  </hp:tbl>
+  <hp:tbl>
+    <hp:tr>
+      <hp:tc><hp:p><hp:run><hp:t>투입인력</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t>담당업무</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t>실무경력</hp:t></hp:run></hp:p></hp:tc>
+    </hp:tr>
+    <hp:tr>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
+    </hp:tr>
+  </hp:tbl>
+</hp:sec>
+"""
+
+
+def _write_hwpx(path: Path, section_xml: str = SECTION_XML) -> None:
     with ZipFile(path, "w", compression=ZIP_DEFLATED) as archive:
-        archive.writestr("Contents/section0.xml", SECTION_XML)
+        archive.writestr("Contents/section0.xml", section_xml)
         archive.writestr("mimetype", "application/hwp+zip")

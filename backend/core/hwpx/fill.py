@@ -5,6 +5,7 @@ import zipfile
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -392,7 +393,7 @@ def _match_header_fields(
     for col_index, cell in enumerate(row):
         normalized = _normalize(_cell_text(cell))
         for field_key, aliases in header_fields.items():
-            if any(_normalize(alias) in normalized for alias in aliases):
+            if any(_is_label_match(normalized, _normalize(alias)) for alias in aliases):
                 matched[col_index] = field_key
                 break
     return matched
@@ -400,7 +401,7 @@ def _match_header_fields(
 
 def _is_personnel_consent_table(table: HwpxTable) -> bool:
     text = _normalize(" ".join(cell.text for row in table.rows for cell in row))
-    if not any(keyword in text for keyword in ("개인정보", "동의서", "보안서약", "청렴서약")):
+    if not any(_is_label_match(text, _normalize(keyword)) for keyword in CONSENT_KEYWORDS):
         return False
     fields = {
         field
@@ -414,7 +415,7 @@ def _is_personnel_consent_table(table: HwpxTable) -> bool:
 def _consent_field_key(label: str) -> str | None:
     normalized = _normalize(label)
     for field_key, aliases in CONSENT_LABEL_FIELDS.items():
-        if any(_normalize(alias) in normalized for alias in aliases):
+        if any(_is_label_match(normalized, _normalize(alias)) for alias in aliases):
             return field_key
     return None
 
@@ -486,6 +487,18 @@ def _normalize(value: str) -> str:
     return re.sub(r"[^0-9a-zA-Z가-힣]", "", value).lower()
 
 
+def _is_label_match(label: str, alias: str) -> bool:
+    if not label or not alias:
+        return False
+    if alias in label:
+        return True
+    if len(label) >= 3 and label in alias:
+        return True
+    if len(label) < 3 or len(alias) < 3:
+        return False
+    return SequenceMatcher(None, label, alias).ratio() >= 0.72
+
+
 def _parse_cell_ref(cell_ref: str) -> dict[str, str] | None:
     match = CELL_REF_RE.match(cell_ref)
     return match.groupdict() if match else None
@@ -505,21 +518,21 @@ def _local_name(tag: str) -> str:
 
 TRACK_RECORD_HEADER_FIELDS: dict[str, tuple[str, ...]] = {
     "no": ("연번", "번호", "순번"),
-    "taskName": ("사업명", "용역명", "과업명", "계약명"),
-    "org": ("발주처", "발주기관", "수요기관", "기관명"),
-    "amount": ("계약금액", "금액", "용역금액"),
+    "taskName": ("사업명", "용역명", "과업명", "계약명", "프로젝트명", "수행사업명"),
+    "org": ("발주처", "발주기관", "수요기관", "기관명", "기관"),
+    "amount": ("계약금액", "금액", "용역금액", "사업비", "수행금액"),
     "contractPeriod": ("계약기간", "수행기간", "기간"),
     "year": ("연도", "수행연도"),
     "field": ("분야", "사업분야"),
-    "desc": ("개요", "주요내용", "용역개요"),
+    "desc": ("개요", "주요내용", "용역개요", "수행내용", "사업내용"),
 }
 
 PERSONNEL_HEADER_FIELDS: dict[str, tuple[str, ...]] = {
     "no": ("연번", "번호", "순번"),
-    "name": ("성명", "이름", "참여인력"),
+    "name": ("성명", "이름", "참여인력", "투입인력", "참여자", "담당자"),
     "dept": ("소속", "부서"),
-    "position": ("직위", "직책", "역할"),
-    "career": ("경력", "경력기간"),
+    "position": ("직위", "직책", "역할", "담당업무", "책임"),
+    "career": ("경력", "경력기간", "실무경력"),
     "joinDate": ("입사일", "입사"),
     "eduSchool": ("학교", "최종학교"),
     "eduMajor": ("전공", "학과"),
@@ -527,13 +540,22 @@ PERSONNEL_HEADER_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 CONSENT_LABEL_FIELDS: dict[str, tuple[str, ...]] = {
-    "name": ("성명", "이름"),
+    "name": ("성명", "이름", "참여자", "동의자"),
     "dept": ("소속", "부서"),
     "position": ("직위", "직책"),
     "birth": ("생년월일", "생년", "주민등록번호"),
     "phone": ("전화", "연락처", "휴대전화"),
     "email": ("이메일", "전자우편", "e-mail"),
 }
+
+CONSENT_KEYWORDS: tuple[str, ...] = (
+    "개인정보",
+    "동의서",
+    "개인정보수집",
+    "개인정보제공",
+    "보안서약",
+    "청렴서약",
+)
 
 RECORD_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "no": ("no",),
