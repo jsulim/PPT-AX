@@ -6,7 +6,9 @@ from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
+from io import BytesIO
 from pathlib import Path
+from typing import cast
 from xml.etree import ElementTree as ET
 
 from core.hwpx.mapping import FieldMapping
@@ -174,7 +176,7 @@ def _fill_xml(
     table_rows: list[TableRowFill],
     repeated_tables: list[RepeatedTableFill],
 ) -> tuple[bytes, list[str], list[dict[str, str]]]:
-    ET.register_namespace("hp", "http://www.hancom.co.kr/hwpml/2011/paragraph")
+    _register_namespaces(data)
     root = ET.fromstring(data)
     tables = _iter_local(root, "tbl")
     filled: list[str] = []
@@ -203,9 +205,9 @@ def _fill_xml(
             skipped.append({"cell_ref": fill.cell_ref, "reason": "cell_not_found"})
             continue
         _replace_text(cell, fill.value)
-        filled.append(fill.cell_ref)
+        filled.append(f"{fill.field_key}@{fill.cell_ref}")
 
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True), filled, skipped
+    return _serialize_hwpx_xml(root), filled, skipped
 
 
 def _apply_table_rows(
@@ -239,7 +241,7 @@ def _apply_table_rows(
                 continue
             _replace_text(cells[col_index], value)
             filled.append(
-                f"{table_fill.xml_path}:tbl{table_fill.table_index}:row{item_index}:{field_key}"
+                f"{field_key}@{table_fill.xml_path}:tbl{table_fill.table_index}:row{item_index}"
             )
         table.insert(insert_at + item_index, row)
 
@@ -268,7 +270,7 @@ def _apply_repeated_table(
         table = template_table if item_index == 0 else deepcopy(template_table)
         _fill_label_value_table(table, values)
         filled.append(
-            f"{table_fill.xml_path}:tbl{table_fill.table_index}:repeat{item_index}:personnel"
+            f"personnel.repeat@{table_fill.xml_path}:tbl{table_fill.table_index}:repeat{item_index}"
         )
         if item_index > 0:
             parent.insert(insert_at + item_index, table)
@@ -497,6 +499,16 @@ def _is_label_match(label: str, alias: str) -> bool:
     if len(label) < 3 or len(alias) < 3:
         return False
     return SequenceMatcher(None, label, alias).ratio() >= 0.72
+
+
+def _register_namespaces(data: bytes) -> None:
+    for _, (prefix, uri) in ET.iterparse(BytesIO(data), events=("start-ns",)):
+        ET.register_namespace(prefix, uri)
+
+
+def _serialize_hwpx_xml(root: ET.Element) -> bytes:
+    body = cast(bytes, ET.tostring(root, encoding="utf-8", xml_declaration=False))
+    return b'<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>' + body
 
 
 def _parse_cell_ref(cell_ref: str) -> dict[str, str] | None:
