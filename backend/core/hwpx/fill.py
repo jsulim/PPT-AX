@@ -6,10 +6,10 @@ from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from io import BytesIO
 from pathlib import Path
-from typing import cast
-from xml.etree import ElementTree as ET
+from typing import Any, cast
+
+from lxml import etree as LET
 
 from core.hwpx.mapping import FieldMapping
 from core.hwpx.read import HwpxDocument, HwpxTable
@@ -183,8 +183,8 @@ def _fill_xml(
     table_rows: list[TableRowFill],
     repeated_tables: list[RepeatedTableFill],
 ) -> tuple[bytes, list[str], list[dict[str, str]]]:
-    _register_namespaces(data)
-    root = ET.fromstring(data)
+    parser = LET.XMLParser(remove_blank_text=False, resolve_entities=False, huge_tree=True)
+    root = LET.fromstring(data, parser=parser)
     tables = _iter_local(root, "tbl")
     filled: list[str] = []
     skipped: list[dict[str, str]] = []
@@ -218,7 +218,7 @@ def _fill_xml(
 
 
 def _apply_table_rows(
-    tables: list[ET.Element],
+    tables: list[Any],
     table_fill: TableRowFill,
 ) -> tuple[list[str], list[dict[str, str]]]:
     filled: list[str] = []
@@ -256,8 +256,8 @@ def _apply_table_rows(
 
 
 def _apply_repeated_table(
-    root: ET.Element,
-    tables: list[ET.Element],
+    root: Any,
+    tables: list[Any],
     table_fill: RepeatedTableFill,
 ) -> tuple[list[str], list[dict[str, str]]]:
     if not table_fill.rows:
@@ -284,7 +284,7 @@ def _apply_repeated_table(
     return filled, []
 
 
-def _fill_label_value_table(table: ET.Element, values: dict[str, str]) -> None:
+def _fill_label_value_table(table: Any, values: dict[str, str]) -> None:
     for row in _children_local(table, "tr"):
         cells = _children_local(row, "tc")
         for index, cell in enumerate(cells):
@@ -299,7 +299,7 @@ def _fill_label_value_table(table: ET.Element, values: dict[str, str]) -> None:
                 )
 
 
-def _replace_text(root: ET.Element, value: str) -> None:
+def _replace_text(root: Any, value: str) -> None:
     text_nodes = [element for element in root.iter() if _local_name(element.tag) == "t"]
     if not text_nodes:
         return
@@ -490,7 +490,7 @@ def _list_value(values: dict[str, object], key: str) -> list[dict[str, object]]:
     return [item for item in value if isinstance(item, dict)]
 
 
-def _target_cell(cells: list[ET.Element], label_index: int) -> ET.Element | None:
+def _target_cell(cells: list[Any], label_index: int) -> Any | None:
     for candidate in cells[label_index + 1 :]:
         text = _text_of(candidate)
         if not text.strip() or re.fullmatch(r"[\[\]().:·\-\s_]+", text):
@@ -504,12 +504,12 @@ def _cell_text(cell: object) -> str:
     return str(getattr(cell, "text", ""))
 
 
-def _text_of(root: ET.Element) -> str:
+def _text_of(root: Any) -> str:
     texts = [element.text or "" for element in root.iter() if _local_name(element.tag) == "t"]
     return "\n".join(text.strip() for text in texts if text and text.strip()).strip()
 
 
-def _find_parent(root: ET.Element, target: ET.Element) -> ET.Element | None:
+def _find_parent(root: Any, target: Any) -> Any | None:
     for parent in root.iter():
         if target in list(parent):
             return parent
@@ -532,13 +532,8 @@ def _is_label_match(label: str, alias: str) -> bool:
     return SequenceMatcher(None, label, alias).ratio() >= 0.72
 
 
-def _register_namespaces(data: bytes) -> None:
-    for _, (prefix, uri) in ET.iterparse(BytesIO(data), events=("start-ns",)):
-        ET.register_namespace(prefix, uri)
-
-
-def _serialize_hwpx_xml(root: ET.Element) -> bytes:
-    body = cast(bytes, ET.tostring(root, encoding="utf-8", xml_declaration=False))
+def _serialize_hwpx_xml(root: Any) -> bytes:
+    body = cast(bytes, LET.tostring(root, encoding="UTF-8", xml_declaration=False))
     return b'<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>' + body
 
 
@@ -547,11 +542,11 @@ def _parse_cell_ref(cell_ref: str) -> dict[str, str] | None:
     return match.groupdict() if match else None
 
 
-def _iter_local(root: ET.Element, name: str) -> list[ET.Element]:
+def _iter_local(root: Any, name: str) -> list[Any]:
     return [element for element in root.iter() if _local_name(element.tag) == name]
 
 
-def _children_local(root: ET.Element, name: str) -> list[ET.Element]:
+def _children_local(root: Any, name: str) -> list[Any]:
     return [element for element in list(root) if _local_name(element.tag) == name]
 
 
