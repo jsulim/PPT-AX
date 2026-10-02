@@ -20,8 +20,16 @@ class Settings(BaseSettings):
     data_dir: Path = Path("/data")
 
     backend_cors_origins_raw: str = Field(
-        default="http://localhost:3000",
+        default=(
+            "http://localhost:3000,"
+            "https://script.google.com,"
+            "https://script.googleusercontent.com"
+        ),
         validation_alias="BACKEND_CORS_ORIGINS",
+    )
+    backend_cors_origin_regex: str | None = Field(
+        default=r"https://.*\.googleusercontent\.com",
+        validation_alias="BACKEND_CORS_ORIGIN_REGEX",
     )
     admin_emails_raw: str = Field(default="", validation_alias="ADMIN_EMAILS")
 

@@ -214,3 +214,31 @@ class UsageEvent(TimestampMixin, Base):
     user_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     event: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class GeneratedDeck(TimestampMixin, Base):
+    __tablename__ = "generated_decks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("templates.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    outline_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("outlines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ready", index=True)
+    output_path: Mapped[str] = mapped_column(Text, nullable=False)
+    report: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
