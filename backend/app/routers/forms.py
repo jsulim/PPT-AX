@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 
 from app.schemas.forms import HwpxAnalyzeResponse, HwpxFillResponse, HwpxMappingRead
 from app.settings import Settings, get_settings
-from core.hwpx.fill import build_cell_fills, fill_hwpx_cells
+from core.hwpx.fill import build_cell_fills, build_repeating_fills, fill_hwpx_cells
 from core.hwpx.mapping import infer_label_mappings
 from core.hwpx.read import form_text, read_hwpx
 
@@ -50,15 +50,22 @@ def fill_hwpx_form(
         document = read_hwpx(stored_path)
         mappings = infer_label_mappings(document)
         fills, missing = build_cell_fills(mappings, values)
+        table_rows, repeated_tables, repeat_missing = build_repeating_fills(document, values)
 
         output_filename = f"{uuid.uuid4()}.hwpx"
         output_path = settings.outputs_dir / "hwpx" / output_filename
-        report = fill_hwpx_cells(stored_path, output_path, fills)
+        report = fill_hwpx_cells(
+            stored_path,
+            output_path,
+            fills,
+            table_rows=table_rows,
+            repeated_tables=repeated_tables,
+        )
         return HwpxFillResponse(
             output_filename=output_filename,
             download_url=f"/forms/hwpx/outputs/{output_filename}",
             filled=report.filled,
-            missing=missing,
+            missing=missing + repeat_missing,
             skipped=report.skipped,
         )
     except json.JSONDecodeError as exc:
