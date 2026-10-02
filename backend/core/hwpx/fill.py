@@ -136,7 +136,14 @@ def build_repeating_fills(
 
     for table in document.tables:
         table_kind, header_row_index, column_fields = _detect_repeating_table(table)
-        if table_kind == "track_records":
+        is_consent_table = _is_personnel_consent_table(table)
+        row_fill: TableRowFill | None
+        row_missing: list[dict[str, str]]
+        if is_consent_table:
+            row_fill, row_missing = None, []
+        elif not _has_blank_template_row(table, header_row_index):
+            row_fill, row_missing = None, []
+        elif table_kind == "track_records":
             row_fill, row_missing = _build_table_row_fill(
                 table,
                 header_row_index,
@@ -158,7 +165,7 @@ def build_repeating_fills(
             table_rows.append(row_fill)
             missing.extend(row_missing)
 
-        if personnel and _is_personnel_consent_table(table):
+        if personnel and is_consent_table:
             repeated_tables.append(
                 RepeatedTableFill(
                     xml_path=table.xml_path,
@@ -374,17 +381,41 @@ def _detect_repeating_table(table: HwpxTable) -> tuple[str | None, int, dict[int
         track_fields = _match_header_fields(row, TRACK_RECORD_HEADER_FIELDS)
         personnel_score = len(set(personnel_fields.values()) - {"no"})
         track_score = len(set(track_fields.values()) - {"no"})
-        if personnel_score > best_score and personnel_score >= 2:
+        if (
+            personnel_score > best_score
+            and personnel_score >= 3
+            and "name" in personnel_fields.values()
+        ):
             best_kind = "personnel"
             best_row_index = row_index
             best_fields = personnel_fields
             best_score = personnel_score
-        if track_score > best_score and track_score >= 2:
+        if (
+            track_score > best_score
+            and track_score >= 3
+            and "taskName" in track_fields.values()
+            and bool({"org", "amount", "contractPeriod"} & set(track_fields.values()))
+        ):
             best_kind = "track_records"
             best_row_index = row_index
             best_fields = track_fields
             best_score = track_score
     return best_kind, best_row_index, best_fields
+
+
+def _has_blank_template_row(table: HwpxTable, header_row_index: int) -> bool:
+    template_row_index = header_row_index + 1
+    if header_row_index < 0 or template_row_index >= len(table.rows):
+        return False
+    row = table.rows[template_row_index]
+    if not row:
+        return False
+    blank_count = 0
+    for cell in row:
+        text = _normalize(cell.text)
+        if not text or text in {"년개월", "년", "개월"}:
+            blank_count += 1
+    return blank_count / len(row) >= 0.6
 
 
 def _match_header_fields(
