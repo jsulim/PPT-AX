@@ -1,7 +1,9 @@
+﻿import Link from "next/link";
+
 import { getHealth } from "@/lib/api";
 
 const labels: Record<string, string> = {
-  db: "DB",
+  db: "PostgreSQL",
   redis: "Redis",
   worker: "Worker",
 };
@@ -11,22 +13,34 @@ export default async function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-8 px-6 py-10">
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col gap-3 border-b border-slate-200 pb-6">
         <p className="text-sm font-medium text-slate-500">인트윈 제안 자동화 플랫폼</p>
-        <h1 className="text-3xl font-semibold tracking-normal text-slate-950">PPT AX</h1>
-        <a
-          className="w-fit text-sm font-medium text-slate-700 underline underline-offset-4"
-          href="/integrations/work-prove"
-        >
-          입찰자동화 데이터 가져오기
-        </a>
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-normal text-slate-950">PPT AX</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              입찰 서식 채우기와 제안서 초안 생성을 위한 내부 도구입니다.
+            </p>
+          </div>
+          <nav className="flex flex-wrap gap-2">
+            <Link className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900" href="/company">
+              회사 데이터
+            </Link>
+            <Link className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900" href="/forms/jobs">
+              생성 결과
+            </Link>
+            <Link className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white" href="/integrations/work-prove">
+              입찰자동화 가져오기
+            </Link>
+          </nav>
+        </div>
       </header>
 
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <h2 className="text-lg font-semibold text-slate-900">실행 상태</h2>
           <span className="text-sm text-slate-500">
-            {health ? (health.status === "ok" ? "정상입니다." : "확인이 필요합니다.") : "API 연결이 필요합니다."}
+            {health ? (health.status === "ok" ? "정상입니다." : "확인이 필요합니다.") : "API 연결을 확인해야 합니다."}
           </span>
         </div>
 

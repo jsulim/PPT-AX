@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { apiBaseUrl, getHwpxFormJob } from "@/lib/api";
@@ -31,13 +31,21 @@ export default async function HwpxFormJobDetailPage({ params }: PageProps) {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-6 py-8">
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col gap-3 border-b border-slate-200 pb-5">
         <Link className="w-fit text-sm font-medium text-slate-600 underline" href="/forms/jobs">
           생성 로그로
         </Link>
-        <div>
-          <p className="text-sm font-medium text-slate-500">HWPX 생성 상세</p>
-          <h1 className="break-all text-2xl font-semibold text-slate-950">{job.output_filename}</h1>
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <p className="text-sm font-medium text-slate-500">HWPX 생성 상세</p>
+            <h1 className="break-all text-2xl font-semibold text-slate-950">{job.output_filename}</h1>
+          </div>
+          <a
+            className="w-fit rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+            href={`${apiBaseUrl}${job.download_url}`}
+          >
+            HWPX 다운로드
+          </a>
         </div>
       </header>
 
@@ -56,18 +64,12 @@ export default async function HwpxFormJobDetailPage({ params }: PageProps) {
           <Info label="원본 저장명" value={job.original_filename} />
           <Info label="작업 ID" value={job.job_id} />
         </dl>
-        <a
-          className="mt-4 inline-flex rounded border border-slate-300 px-3 py-2 text-sm font-medium text-slate-900"
-          href={`${apiBaseUrl}${job.download_url}`}
-        >
-          HWPX 다운로드
-        </a>
       </section>
 
       <LogList title="채운 항목" items={job.filled} empty="채운 항목이 없습니다." tone="emerald" />
       <ObjectList title="누락 항목" items={job.missing} empty="누락 항목이 없습니다." tone="amber" />
       <ObjectList title="스킵 항목" items={job.skipped} empty="스킵 항목이 없습니다." tone="rose" />
-      <ObjectList title="자동 매핑 후보" items={job.mappings} empty="매핑 후보가 없습니다." tone="slate" />
+      <ObjectList title="자동 매핑 정보" items={job.mappings} empty="매핑 정보가 없습니다." tone="slate" />
     </main>
   );
 }

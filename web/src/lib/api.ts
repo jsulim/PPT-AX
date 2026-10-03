@@ -28,6 +28,13 @@ export type HwpxFormJobDetail = HwpxFormJobSummary & {
   mappings: Array<Record<string, unknown>>;
 };
 
+export type CompanyDataSnapshot = {
+  company: Record<string, unknown>;
+  personnel: Array<Record<string, unknown>>;
+  personnel_careers: Array<Record<string, unknown>>;
+  track_records: Array<Record<string, unknown>>;
+};
+
 export const apiBaseUrl = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
 export async function getHealth(): Promise<HealthResponse | null> {
@@ -60,4 +67,19 @@ export async function getHwpxFormJob(jobId: string): Promise<HwpxFormJobDetail |
     return null;
   }
   return (await response.json()) as HwpxFormJobDetail;
+}
+
+export async function getCompanyDataSnapshot(): Promise<CompanyDataSnapshot> {
+  const response = await fetch(`${apiBaseUrl}/integrations/company/snapshot`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    return {
+      company: {},
+      personnel: [],
+      personnel_careers: [],
+      track_records: [],
+    };
+  }
+  return (await response.json()) as CompanyDataSnapshot;
 }

@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 
 import { apiBaseUrl, getHwpxFormJobs } from "@/lib/api";
 
@@ -15,9 +15,9 @@ export default async function HwpxFormJobsPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-6 py-8">
-      <header className="flex flex-col gap-2">
-        <Link className="w-fit text-sm font-medium text-slate-600 underline" href="/">
-          홈으로
+      <header className="flex flex-col gap-3 border-b border-slate-200 pb-5">
+        <Link className="w-fit text-sm font-medium text-slate-600 underline" href="/company">
+          회사 데이터로
         </Link>
         <div>
           <p className="text-sm font-medium text-slate-500">HWPX 생성 결과</p>
@@ -36,7 +36,7 @@ export default async function HwpxFormJobsPage() {
         </div>
         {jobs.length === 0 ? (
           <p className="px-4 py-10 text-sm text-slate-500">
-            아직 생성 로그가 없습니다. HWPX를 새로 생성하면 여기에 기록됩니다.
+            아직 생성 로그가 없습니다. HWPX를 생성하면 이곳에 기록됩니다.
           </p>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -60,10 +60,7 @@ export default async function HwpxFormJobsPage() {
                   <Link className="font-medium text-slate-900 underline" href={`/forms/jobs/${job.job_id}`}>
                     상세
                   </Link>
-                  <a
-                    className="font-medium text-slate-700 underline"
-                    href={`${apiBaseUrl}${job.download_url}`}
-                  >
+                  <a className="font-medium text-slate-700 underline" href={`${apiBaseUrl}${job.download_url}`}>
                     다운로드
                   </a>
                 </span>
