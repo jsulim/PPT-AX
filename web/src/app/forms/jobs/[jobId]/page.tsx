@@ -1,7 +1,7 @@
 ﻿import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { apiBaseUrl, getHwpxFormJob } from "@/lib/api";
+import { getHwpxFormJob, publicApiBaseUrl } from "@/lib/api";
 
 type PageProps = {
   params: {
@@ -42,7 +42,7 @@ export default async function HwpxFormJobDetailPage({ params }: PageProps) {
           </div>
           <a
             className="w-fit rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-            href={`${apiBaseUrl}${job.download_url}`}
+            href={`${publicApiBaseUrl}${job.download_url}`}
           >
             HWPX 다운로드
           </a>

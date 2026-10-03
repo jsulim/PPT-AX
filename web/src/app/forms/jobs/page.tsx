@@ -1,6 +1,6 @@
 ﻿import Link from "next/link";
 
-import { apiBaseUrl, getHwpxFormJobs } from "@/lib/api";
+import { getHwpxFormJobs, publicApiBaseUrl } from "@/lib/api";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -60,7 +60,10 @@ export default async function HwpxFormJobsPage() {
                   <Link className="font-medium text-slate-900 underline" href={`/forms/jobs/${job.job_id}`}>
                     상세
                   </Link>
-                  <a className="font-medium text-slate-700 underline" href={`${apiBaseUrl}${job.download_url}`}>
+                  <a
+                    className="font-medium text-slate-700 underline"
+                    href={`${publicApiBaseUrl}${job.download_url}`}
+                  >
                     다운로드
                   </a>
                 </span>

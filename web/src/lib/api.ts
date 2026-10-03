@@ -36,6 +36,7 @@ export type CompanyDataSnapshot = {
 };
 
 export const apiBaseUrl = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
+export const publicApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export async function getHealth(): Promise<HealthResponse | null> {
   try {

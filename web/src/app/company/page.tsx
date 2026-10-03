@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { apiBaseUrl, getCompanyDataSnapshot, getHwpxFormJobs } from "@/lib/api";
+import { getCompanyDataSnapshot, getHwpxFormJobs, publicApiBaseUrl } from "@/lib/api";
 
 const companyFields = [
   ["name", "상호"],
@@ -61,7 +61,7 @@ export default async function CompanyPage() {
             {latestJob ? (
               <a
                 className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-                href={`${apiBaseUrl}${latestJob.download_url}`}
+                href={`${publicApiBaseUrl}${latestJob.download_url}`}
               >
                 최근 서식 다운로드
               </a>
@@ -121,7 +121,10 @@ export default async function CompanyPage() {
                     <Link className="font-medium text-slate-800 underline" href={`/forms/jobs/${job.job_id}`}>
                       상세
                     </Link>
-                    <a className="font-medium text-slate-800 underline" href={`${apiBaseUrl}${job.download_url}`}>
+                    <a
+                      className="font-medium text-slate-800 underline"
+                      href={`${publicApiBaseUrl}${job.download_url}`}
+                    >
                       다운로드
                     </a>
                   </div>
