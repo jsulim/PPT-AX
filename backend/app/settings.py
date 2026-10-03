@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     def outputs_dir(self) -> Path:
         return self.data_dir / "outputs"
 
+    @property
+    def jobs_dir(self) -> Path:
+        return self.data_dir / "jobs"
+
 
 @lru_cache
 def get_settings() -> Settings:

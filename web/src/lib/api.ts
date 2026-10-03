@@ -8,11 +8,31 @@ export type HealthResponse = {
   components: Record<string, ComponentHealth>;
 };
 
-export async function getHealth(): Promise<HealthResponse | null> {
-  const baseUrl = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
+export type HwpxFormJobSummary = {
+  job_id: string;
+  created_at: string;
+  source_filename: string;
+  original_filename: string;
+  output_filename: string;
+  download_url: string;
+  filled_count: number;
+  missing_count: number;
+  skipped_count: number;
+  trim_applied: boolean;
+};
 
+export type HwpxFormJobDetail = HwpxFormJobSummary & {
+  filled: string[];
+  missing: Array<Record<string, string>>;
+  skipped: Array<Record<string, string>>;
+  mappings: Array<Record<string, unknown>>;
+};
+
+export const apiBaseUrl = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
+
+export async function getHealth(): Promise<HealthResponse | null> {
   try {
-    const response = await fetch(`${baseUrl}/health`, { cache: "no-store" });
+    const response = await fetch(`${apiBaseUrl}/health`, { cache: "no-store" });
     if (!response.ok) {
       return null;
     }
@@ -20,4 +40,24 @@ export async function getHealth(): Promise<HealthResponse | null> {
   } catch {
     return null;
   }
+}
+
+export async function getHwpxFormJobs(limit = 50): Promise<HwpxFormJobSummary[]> {
+  const response = await fetch(`${apiBaseUrl}/forms/hwpx/jobs?limit=${limit}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    return [];
+  }
+  return (await response.json()) as HwpxFormJobSummary[];
+}
+
+export async function getHwpxFormJob(jobId: string): Promise<HwpxFormJobDetail | null> {
+  const response = await fetch(`${apiBaseUrl}/forms/hwpx/jobs/${jobId}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    return null;
+  }
+  return (await response.json()) as HwpxFormJobDetail;
 }

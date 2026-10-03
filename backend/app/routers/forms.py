@@ -10,7 +10,20 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from app.schemas.forms import HwpxAnalyzeResponse, HwpxFillResponse, HwpxMappingRead
+from app.schemas.forms import (
+    HwpxAnalyzeResponse,
+    HwpxFillResponse,
+    HwpxFormJobDetail,
+    HwpxFormJobSummary,
+    HwpxMappingRead,
+)
+from app.services.form_jobs import (
+    HwpxFormJob,
+    list_hwpx_form_jobs,
+    now_iso,
+    read_hwpx_form_job,
+    write_hwpx_form_job,
+)
 from app.settings import Settings, get_settings
 from core.hwpx.fill import build_cell_fills, build_repeating_fills, fill_hwpx_cells
 from core.hwpx.mapping import infer_label_mappings
@@ -53,7 +66,8 @@ def fill_hwpx_form(
         fills, missing = build_cell_fills(mappings, values)
         table_rows, repeated_tables, repeat_missing = build_repeating_fills(document, values)
 
-        output_filename = f"{uuid.uuid4()}.hwpx"
+        job_id = str(uuid.uuid4())
+        output_filename = f"{job_id}.hwpx"
         output_path = settings.outputs_dir / "hwpx" / output_filename
         report = fill_hwpx_cells(
             stored_path,
@@ -62,10 +76,26 @@ def fill_hwpx_form(
             table_rows=table_rows,
             repeated_tables=repeated_tables,
         )
-        trim_hwpx_to_form_start(output_path)
-        return HwpxFillResponse(
+        trim_applied = trim_hwpx_to_form_start(output_path)
+        download_url = f"/forms/hwpx/outputs/{output_filename}"
+        job = HwpxFormJob(
+            job_id=job_id,
+            created_at=now_iso(),
+            source_filename=file.filename or "form.hwpx",
+            original_filename=stored_path.name,
             output_filename=output_filename,
-            download_url=f"/forms/hwpx/outputs/{output_filename}",
+            download_url=download_url,
+            filled=report.filled,
+            missing=missing + repeat_missing,
+            skipped=report.skipped,
+            mappings=[mapping.__dict__ for mapping in mappings],
+            trim_applied=trim_applied,
+        )
+        write_hwpx_form_job(settings.jobs_dir, job)
+        return HwpxFillResponse(
+            job_id=job_id,
+            output_filename=output_filename,
+            download_url=download_url,
             filled=report.filled,
             missing=missing + repeat_missing,
             skipped=report.skipped,
@@ -77,6 +107,32 @@ def fill_hwpx_form(
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/hwpx/jobs", response_model=list[HwpxFormJobSummary])
+def list_filled_hwpx_jobs(
+    settings: Annotated[Settings, Depends(get_settings)],
+    limit: int = 50,
+) -> list[HwpxFormJobSummary]:
+    safe_limit = min(max(limit, 1), 200)
+    return [_job_summary(job) for job in list_hwpx_form_jobs(settings.jobs_dir, safe_limit)]
+
+
+@router.get("/hwpx/jobs/{job_id}", response_model=HwpxFormJobDetail)
+def read_filled_hwpx_job(
+    job_id: str,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> HwpxFormJobDetail:
+    job = read_hwpx_form_job(settings.jobs_dir, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="생성 로그를 찾을 수 없습니다.")
+    return HwpxFormJobDetail(
+        **_job_summary(job).model_dump(),
+        filled=job.filled,
+        missing=job.missing,
+        skipped=job.skipped,
+        mappings=job.mappings,
+    )
 
 
 @router.get("/hwpx/outputs/{filename}")
@@ -121,3 +177,18 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _job_summary(job: HwpxFormJob) -> HwpxFormJobSummary:
+    return HwpxFormJobSummary(
+        job_id=job.job_id,
+        created_at=job.created_at,
+        source_filename=job.source_filename,
+        original_filename=job.original_filename,
+        output_filename=job.output_filename,
+        download_url=job.download_url,
+        filled_count=job.filled_count,
+        missing_count=job.missing_count,
+        skipped_count=job.skipped_count,
+        trim_applied=job.trim_applied,
+    )
