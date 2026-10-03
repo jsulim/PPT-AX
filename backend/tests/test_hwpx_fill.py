@@ -166,14 +166,17 @@ def test_fill_repeating_track_records_personnel_and_consent(tmp_path: Path) -> N
 
     assert not missing
     assert "관광 활성화 캠페인" in filled.text
+    assert "지역 축제 운영" in filled.text
     assert "김기획" in filled.text
+    assert "이운영" in filled.text
+    assert "박홍보" in filled.text
     consent_tables = [
         table
         for table in filled.tables
         if any("개인정보 수집 이용 동의서" in cell.text for row in table.rows for cell in row)
     ]
     assert len(consent_tables) == 1
-    assert any(item["reason"] == "not_enough_blank_rows" for item in report.skipped)
+    assert not report.skipped
     assert len(report.filled) >= 8
 
 

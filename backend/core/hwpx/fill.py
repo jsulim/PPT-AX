@@ -280,10 +280,11 @@ def _apply_table_rows(
     try:
         table = tables[table_fill.table_index]
         rows = _children_local(table, "tr")
-        rows[table_fill.template_row_index]
+        template_row = rows[table_fill.template_row_index]
     except IndexError:
         return [], [{"table": str(table_fill.table_index), "reason": "template_row_not_found"}]
 
+    rows = _ensure_table_data_rows(table, rows, template_row, table_fill)
     for item_index, row_values in enumerate(table_fill.rows):
         row_index = table_fill.template_row_index + item_index
         if row_index >= len(rows):
@@ -325,6 +326,67 @@ def _apply_table_rows(
     return filled, skipped
 
 
+def _ensure_table_data_rows(
+    table: Any,
+    rows: list[Any],
+    template_row: Any,
+    table_fill: TableRowFill,
+) -> list[Any]:
+    required_rows = len(table_fill.rows)
+    blank_rows = 0
+    expected_cells = len(_children_local(template_row, "tc"))
+    for row in rows[table_fill.template_row_index :]:
+        if not _is_blank_repeating_row(row, expected_cells):
+            break
+        blank_rows += 1
+    if blank_rows == 0:
+        return rows
+
+    insert_at = list(table).index(rows[table_fill.template_row_index + blank_rows - 1]) + 1
+    for _index in range(max(0, required_rows - blank_rows)):
+        clone = deepcopy(template_row)
+        _clear_row_text(clone)
+        table.insert(insert_at, clone)
+        insert_at += 1
+
+    updated_rows = _children_local(table, "tr")
+    _renumber_table_rows(table, updated_rows)
+    return updated_rows
+
+
+def _is_blank_repeating_row(row: Any, expected_cells: int) -> bool:
+    cells = _children_local(row, "tc")
+    if expected_cells == 0:
+        return False
+    if len(cells) != expected_cells:
+        return False
+    row_text = _normalize(_text_of(row))
+    if any(keyword in row_text for keyword in ("누계", "합계", "소계")):
+        return False
+    blank_count = 0
+    for cell in cells:
+        text = _normalize(_text_of(cell))
+        if not text or text in {"년개월", "개월", "년"}:
+            blank_count += 1
+    return blank_count / len(cells) >= 0.6
+
+
+def _clear_row_text(row: Any) -> None:
+    for cell in _children_local(row, "tc"):
+        _replace_text(cell, "")
+
+
+def _renumber_table_rows(table: Any, rows: list[Any]) -> None:
+    table.set("rowCnt", str(len(rows)))
+    for row_index, row in enumerate(rows):
+        for col_index, cell in enumerate(_children_local(row, "tc")):
+            for child in list(cell):
+                if _local_name(child.tag) == "cellAddr":
+                    child.set("rowAddr", str(row_index))
+                    child.set("colAddr", str(col_index))
+                    break
+
+
 def _apply_repeated_table(
     root: Any,
     tables: list[Any],
@@ -340,7 +402,11 @@ def _apply_repeated_table(
     filled: list[str] = []
     header_row_index, column_fields = _detect_consent_header(template_table)
     if header_row_index >= 0 and column_fields:
-        rows = _children_local(template_table, "tr")
+        rows = _ensure_repeated_table_rows(
+            template_table,
+            header_row_index + 1,
+            len(table_fill.rows),
+        )
         for item_index, values in enumerate(table_fill.rows):
             row_index = header_row_index + 1 + item_index
             if row_index >= len(rows):
@@ -371,6 +437,35 @@ def _apply_repeated_table(
             f"personnel.repeat@{table_fill.xml_path}:tbl{table_fill.table_index}:repeat0"
         )
     return filled, []
+
+
+def _ensure_repeated_table_rows(
+    table: Any,
+    template_row_index: int,
+    required_rows: int,
+) -> list[Any]:
+    rows = _children_local(table, "tr")
+    if template_row_index >= len(rows):
+        return rows
+    template_row = rows[template_row_index]
+    expected_cells = len(_children_local(template_row, "tc"))
+    blank_rows = 0
+    for row in rows[template_row_index:]:
+        if not _is_blank_repeating_row(row, expected_cells):
+            break
+        blank_rows += 1
+    if blank_rows == 0:
+        return rows
+
+    insert_at = list(table).index(rows[template_row_index + blank_rows - 1]) + 1
+    for _index in range(max(0, required_rows - blank_rows)):
+        clone = deepcopy(template_row)
+        _clear_row_text(clone)
+        table.insert(insert_at, clone)
+        insert_at += 1
+    updated_rows = _children_local(table, "tr")
+    _renumber_table_rows(table, updated_rows)
+    return updated_rows
 
 
 def _apply_personnel_profiles(
