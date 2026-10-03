@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import zipfile
 from collections.abc import Sequence
-from copy import deepcopy
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -226,14 +225,22 @@ def _apply_table_rows(
     try:
         table = tables[table_fill.table_index]
         rows = _children_local(table, "tr")
-        template_row = rows[table_fill.template_row_index]
+        rows[table_fill.template_row_index]
     except IndexError:
         return [], [{"table": str(table_fill.table_index), "reason": "template_row_not_found"}]
 
-    insert_at = list(table).index(template_row)
-    table.remove(template_row)
     for item_index, row_values in enumerate(table_fill.rows):
-        row = deepcopy(template_row)
+        row_index = table_fill.template_row_index + item_index
+        if row_index >= len(rows):
+            skipped.append(
+                {
+                    "table": str(table_fill.table_index),
+                    "row": str(item_index),
+                    "reason": "not_enough_blank_rows",
+                }
+            )
+            continue
+        row = rows[row_index]
         cells = _children_local(row, "tc")
         for col_index, (field_key, value) in row_values.items():
             if col_index >= len(cells):
@@ -250,7 +257,6 @@ def _apply_table_rows(
             filled.append(
                 f"{field_key}@{table_fill.xml_path}:tbl{table_fill.table_index}:row{item_index}"
             )
-        table.insert(insert_at + item_index, row)
 
     return filled, skipped
 
@@ -267,20 +273,39 @@ def _apply_repeated_table(
     except IndexError:
         return [], [{"table": str(table_fill.table_index), "reason": "repeat_table_not_found"}]
 
-    parent = _find_parent(root, template_table)
-    if parent is None:
-        return [], [{"table": str(table_fill.table_index), "reason": "parent_not_found"}]
-
-    insert_at = list(parent).index(template_table)
     filled: list[str] = []
-    for item_index, values in enumerate(table_fill.rows):
-        table = template_table if item_index == 0 else deepcopy(template_table)
-        _fill_label_value_table(table, values)
+    header_row_index, column_fields = _detect_consent_header(template_table)
+    if header_row_index >= 0 and column_fields:
+        rows = _children_local(template_table, "tr")
+        for item_index, values in enumerate(table_fill.rows):
+            row_index = header_row_index + 1 + item_index
+            if row_index >= len(rows):
+                return filled, [
+                    {
+                        "table": str(table_fill.table_index),
+                        "row": str(item_index),
+                        "reason": "not_enough_blank_rows",
+                    }
+                ]
+            cells = _children_local(rows[row_index], "tc")
+            for col_index, field_key in column_fields.items():
+                if col_index >= len(cells):
+                    continue
+                _replace_text(
+                    cells[col_index],
+                    values.get(field_key) or f"[확인 필요: personnel.{field_key}]",
+                )
+                filled.append(
+                    f"personnel.{field_key}@{table_fill.xml_path}:"
+                    f"tbl{table_fill.table_index}:repeat{item_index}"
+                )
+        return filled, []
+
+    if table_fill.rows:
+        _fill_label_value_table(template_table, table_fill.rows[0])
         filled.append(
-            f"personnel.repeat@{table_fill.xml_path}:tbl{table_fill.table_index}:repeat{item_index}"
+            f"personnel.repeat@{table_fill.xml_path}:tbl{table_fill.table_index}:repeat0"
         )
-        if item_index > 0:
-            parent.insert(insert_at + item_index, table)
     return filled, []
 
 
@@ -451,6 +476,23 @@ def _consent_field_key(label: str) -> str | None:
         if any(_is_label_match(normalized, _normalize(alias)) for alias in aliases):
             return field_key
     return None
+
+
+def _detect_consent_header(table: Any) -> tuple[int, dict[int, str]]:
+    best_row_index = -1
+    best_fields: dict[int, str] = {}
+    for row_index, row in enumerate(_children_local(table, "tr")):
+        fields: dict[int, str] = {}
+        for col_index, cell in enumerate(_children_local(row, "tc")):
+            field_key = _consent_field_key(_text_of(cell))
+            if field_key is not None:
+                fields[col_index] = field_key
+        if len(fields) > len(best_fields):
+            best_row_index = row_index
+            best_fields = fields
+    if "name" not in best_fields.values() or len(best_fields) < 2:
+        return -1, {}
+    return best_row_index, best_fields
 
 
 def _personnel_consent_values(item: dict[str, object]) -> dict[str, str]:
