@@ -500,7 +500,7 @@ def _find_personnel_profile_block(root: Any) -> tuple[int, int] | None:
     start: int | None = None
     for index, child in enumerate(children):
         text = _text_of(child)
-        if "별지 제11호" in text and "참여인력 이력사항" in text:
+        if _is_personnel_profile_title(text):
             start = index
             break
     if start is None:
@@ -521,6 +521,15 @@ def _find_personnel_profile_block(root: Any) -> tuple[int, int] | None:
     while end > start and not _text_of(children[end - 1]).strip():
         end -= 1
     return start, end
+
+
+def _is_personnel_profile_title(text: str) -> bool:
+    normalized = re.sub(r"\s+", "", text)
+    return (
+        len(normalized) <= 80
+        and "별지제11호" in normalized
+        and "참여인력이력사항" in normalized
+    )
 
 
 def _is_personnel_profile_table(table: Any) -> bool:
