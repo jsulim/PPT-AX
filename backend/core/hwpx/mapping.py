@@ -83,8 +83,6 @@ def _target_cell(row: list[HwpxCell], label_index: int) -> HwpxCell | None:
         text = getattr(candidate, "text", "")
         if not str(text).strip() or re.fullmatch(r"[\[\]().:·\-\s_]+", str(text)):
             return candidate
-    if label_index + 1 < len(row):
-        return row[label_index + 1]
     return None
 
 

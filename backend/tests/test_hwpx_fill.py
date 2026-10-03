@@ -107,14 +107,13 @@ def test_read_map_and_fill_hwpx_cells(tmp_path: Path) -> None:
     assert "별지 제1호 서식" in form_text(document)
     assert {mapping.field_key for mapping in mappings} >= {
         "company.name",
-        "company.ceo_name",
         "company.business_no",
         "bid.name",
     }
     assert any(item["field_key"] == "company.business_no" for item in missing)
     assert len(report.filled) == len(fills)
     assert "인트윈" in filled.text
-    assert "홍길동" in filled.text
+    assert "기존값" in filled.text
     assert "GICON 마케팅 Impact 프로그램 운영" in filled.text
     assert "[확인 필요: company.business_no]" in filled.text
 

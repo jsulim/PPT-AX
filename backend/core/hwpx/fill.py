@@ -210,8 +210,10 @@ def _fill_xml(
         except (IndexError, ValueError):
             skipped.append({"cell_ref": fill.cell_ref, "reason": "cell_not_found"})
             continue
-        _replace_text(cell, fill.value)
-        filled.append(f"{fill.field_key}@{fill.cell_ref}")
+        if _replace_text(cell, fill.value):
+            filled.append(f"{fill.field_key}@{fill.cell_ref}")
+        else:
+            skipped.append({"cell_ref": fill.cell_ref, "reason": "text_node_not_found"})
 
     return _serialize_hwpx_xml(root), filled, skipped
 
@@ -253,10 +255,19 @@ def _apply_table_rows(
                     }
                 )
                 continue
-            _replace_text(cells[col_index], value)
-            filled.append(
-                f"{field_key}@{table_fill.xml_path}:tbl{table_fill.table_index}:row{item_index}"
-            )
+            if _replace_text(cells[col_index], value):
+                filled.append(
+                    f"{field_key}@{table_fill.xml_path}:tbl{table_fill.table_index}:row{item_index}"
+                )
+            else:
+                skipped.append(
+                    {
+                        "table": str(table_fill.table_index),
+                        "row": str(item_index),
+                        "field_key": field_key,
+                        "reason": "text_node_not_found",
+                    }
+                )
 
     return filled, skipped
 
@@ -291,14 +302,14 @@ def _apply_repeated_table(
             for col_index, field_key in column_fields.items():
                 if col_index >= len(cells):
                     continue
-                _replace_text(
+                if _replace_text(
                     cells[col_index],
                     values.get(field_key) or f"[확인 필요: personnel.{field_key}]",
-                )
-                filled.append(
-                    f"personnel.{field_key}@{table_fill.xml_path}:"
-                    f"tbl{table_fill.table_index}:repeat{item_index}"
-                )
+                ):
+                    filled.append(
+                        f"personnel.{field_key}@{table_fill.xml_path}:"
+                        f"tbl{table_fill.table_index}:repeat{item_index}"
+                    )
         return filled, []
 
     if table_fill.rows:
@@ -324,13 +335,21 @@ def _fill_label_value_table(table: Any, values: dict[str, str]) -> None:
                 )
 
 
-def _replace_text(root: Any, value: str) -> None:
+def _replace_text(root: Any, value: str) -> bool:
     text_nodes = [element for element in root.iter() if _local_name(element.tag) == "t"]
     if not text_nodes:
-        return
+        run = next((element for element in root.iter() if _local_name(element.tag) == "run"), None)
+        if run is None:
+            return False
+        namespace = run.tag.rsplit("}", 1)[0].lstrip("{") if "}" in run.tag else ""
+        tag = f"{{{namespace}}}t" if namespace else "t"
+        text_node = LET.Element(tag)
+        run.insert(0, text_node)
+        text_nodes = [text_node]
     text_nodes[0].text = value
     for node in text_nodes[1:]:
         node.text = ""
+    return True
 
 
 def _resolve_value(values: dict[str, object], path: str) -> object | None:
