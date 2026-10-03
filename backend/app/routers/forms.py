@@ -15,6 +15,7 @@ from app.settings import Settings, get_settings
 from core.hwpx.fill import build_cell_fills, build_repeating_fills, fill_hwpx_cells
 from core.hwpx.mapping import infer_label_mappings
 from core.hwpx.read import form_text, read_hwpx
+from core.hwpx.trim import trim_hwpx_to_form_start
 
 router = APIRouter(prefix="/forms", tags=["forms"])
 
@@ -61,6 +62,7 @@ def fill_hwpx_form(
             table_rows=table_rows,
             repeated_tables=repeated_tables,
         )
+        trim_hwpx_to_form_start(output_path)
         return HwpxFillResponse(
             output_filename=output_filename,
             download_url=f"/forms/hwpx/outputs/{output_filename}",

@@ -4,6 +4,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from core.hwpx.fill import build_cell_fills, build_repeating_fills, fill_hwpx_cells
 from core.hwpx.mapping import infer_label_mappings
 from core.hwpx.read import form_text, read_hwpx
+from core.hwpx.trim import trim_hwpx_to_form_start
 
 SECTION_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <hp:sec xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
@@ -220,6 +221,18 @@ def test_fuzzy_label_and_header_matching(tmp_path: Path) -> None:
     assert "최전략" in filled.text
     assert "총괄" in filled.text
     assert report.filled
+
+
+def test_trim_hwpx_to_form_start_removes_notice_pages(tmp_path: Path) -> None:
+    input_path = tmp_path / "form.hwpx"
+    _write_hwpx(input_path)
+
+    assert trim_hwpx_to_form_start(input_path)
+
+    trimmed = read_hwpx(input_path)
+    assert "공고문 안내 내용" not in trimmed.text
+    assert "별지 제1호 서식" in trimmed.text
+    assert "입찰참가신청서" not in trimmed.text
 
 
 
