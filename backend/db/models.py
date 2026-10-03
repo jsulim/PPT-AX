@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -242,3 +242,94 @@ class GeneratedDeck(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="ready", index=True)
     output_path: Mapped[str] = mapped_column(Text, nullable=False)
     report: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class CompanyProfile(TimestampMixin, Base):
+    __tablename__ = "company_profile"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="work_prove",
+        index=True,
+    )
+    source_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    source_row_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    business_no: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    corporate_no: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    ceo_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class Personnel(TimestampMixin, Base):
+    __tablename__ = "personnel"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="work_prove",
+        index=True,
+    )
+    source_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    source_row_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    department: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    position: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    role: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    data: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
+class PersonnelCareer(TimestampMixin, Base):
+    __tablename__ = "personnel_careers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    personnel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("personnel.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="work_prove",
+        index=True,
+    )
+    source_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    source_row_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    personnel_source_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    personnel_name: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    project_name: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
+    client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    period: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    data: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class TrackRecord(TimestampMixin, Base):
+    __tablename__ = "track_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="work_prove",
+        index=True,
+    )
+    source_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    source_row_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    project_name: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    client_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    period: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    amount_krw: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    domain: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    data: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)

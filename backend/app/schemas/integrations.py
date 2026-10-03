@@ -59,3 +59,29 @@ class WorkProveImportResponse(BaseModel):
     notice_context_id: UUID
     bid_context_id: UUID
     outline_id: UUID
+
+
+class CompanyDataSyncRequest(BaseModel):
+    source: str = Field(default="work_prove", max_length=80)
+    company: dict[str, object] = Field(default_factory=dict)
+    personnel: list[dict[str, object]] = Field(default_factory=list)
+    personnel_careers: list[dict[str, object]] = Field(
+        default_factory=list,
+        alias="personnelCareers",
+    )
+    track_records: list[dict[str, object]] = Field(default_factory=list, alias="trackRecords")
+    user_email: str | None = Field(default=None, alias="userEmail")
+
+
+class CompanyDataSyncResponse(BaseModel):
+    company_profile: int
+    personnel: int
+    personnel_careers: int
+    track_records: int
+
+
+class CompanyDataSnapshot(BaseModel):
+    company: dict[str, object] = Field(default_factory=dict)
+    personnel: list[dict[str, object]] = Field(default_factory=list)
+    personnel_careers: list[dict[str, object]] = Field(default_factory=list)
+    track_records: list[dict[str, object]] = Field(default_factory=list)

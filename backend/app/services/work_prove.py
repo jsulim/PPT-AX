@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.schemas.integrations import WorkProveImportRequest
+from app.services.company_sync import build_company_sync_request_from_work_prove, sync_company_data
 from db.models import BidContext, NoticeContext, Outline, Project, UsageEvent
 
 
@@ -59,6 +60,19 @@ def import_work_prove_payload(db: Session, payload: WorkProveImportRequest) -> t
         items=payload.outline_items,
     )
     db.add(outline)
+
+    sync_company_data(
+        db,
+        build_company_sync_request_from_work_prove(
+            company=payload.company,
+            personnel=payload.personnel,
+            track_records=payload.track_records,
+            selected_personnel=payload.selected_personnel,
+            selected_track_records=payload.selected_track_records,
+            user_email=payload.user_email,
+        ),
+        commit=False,
+    )
 
     db.add(
         UsageEvent(
