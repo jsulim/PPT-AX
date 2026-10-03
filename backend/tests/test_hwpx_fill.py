@@ -1,7 +1,12 @@
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from core.hwpx.fill import build_cell_fills, build_repeating_fills, fill_hwpx_cells
+from core.hwpx.fill import (
+    build_cell_fills,
+    build_personnel_profile_fills,
+    build_repeating_fills,
+    fill_hwpx_cells,
+)
 from core.hwpx.mapping import infer_label_mappings
 from core.hwpx.read import form_text, read_hwpx
 from core.hwpx.trim import trim_hwpx_to_form_start
@@ -234,6 +239,125 @@ def test_trim_hwpx_to_form_start_removes_notice_pages(tmp_path: Path) -> None:
     assert "별지 제1호 서식" in trimmed.text
     assert "입찰참가신청서" not in trimmed.text
 
+
+def test_fill_repeats_personnel_profile_blocks(tmp_path: Path) -> None:
+    input_path = tmp_path / "profile.hwpx"
+    output_path = tmp_path / "filled.hwpx"
+    _write_hwpx(input_path, PERSONNEL_PROFILE_SECTION_XML)
+
+    document = read_hwpx(input_path)
+    profiles, missing = build_personnel_profile_fills(
+        document,
+        {
+            "company": {"name": "인트윈"},
+            "personnel": [
+                {
+                    "name": "김기획",
+                    "dept": "전략팀",
+                    "age": "35",
+                    "position": "PM",
+                    "career": "8년",
+                    "eduSchool": "한국대학교",
+                    "eduMajor": "경영학",
+                    "role": "총괄",
+                    "participationPeriod": "2026.10~2027.01",
+                    "participationRate": "50",
+                },
+                {
+                    "name": "이운영",
+                    "dept": "운영팀",
+                    "age": "32",
+                    "position": "PL",
+                    "career": "6년",
+                    "eduSchool": "서울대학교",
+                    "eduMajor": "행정학",
+                    "role": "운영",
+                    "participationPeriod": "2026.10~2027.01",
+                    "participationRate": "40",
+                },
+            ],
+        },
+    )
+
+    report = fill_hwpx_cells(input_path, output_path, [], personnel_profiles=profiles)
+    filled = read_hwpx(output_path)
+
+    assert not missing
+    assert "김기획" in filled.text
+    assert "이운영" in filled.text
+    assert filled.text.count("【별지 제11호 서식】 참여인력 이력사항") == 2
+    assert filled.text.count("상호 또는 법인명 : 인트윈") == 2
+    assert "[확인 필요: personnel.certifications]" not in filled.text
+    assert any("personnel.name@profile:1" in item for item in report.filled)
+
+
+
+PERSONNEL_PROFILE_SECTION_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<hp:sec xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+  <hp:p><hp:run><hp:t>공고문 본문</hp:t></hp:run></hp:p>
+  <hp:p><hp:run><hp:t>【별지 제11호 서식】 참여인력 이력사항</hp:t></hp:run></hp:p>
+  <hp:p><hp:run><hp:t>참여인력 이력사항</hp:t></hp:run></hp:p>
+  <hp:p>
+    <hp:tbl>
+      <hp:tr>
+        <hp:tc><hp:p><hp:run><hp:t>성 명</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>소 속</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+      </hp:tr>
+      <hp:tr>
+        <hp:tc><hp:p><hp:run><hp:t>연 령</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>직 위</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+      </hp:tr>
+      <hp:tr>
+        <hp:tc><hp:p><hp:run><hp:t>학 력</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>대학교</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>전공</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>해당분야 근무경력</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>년      개월</hp:t></hp:run></hp:p></hp:tc>
+      </hp:tr>
+      <hp:tr>
+        <hp:tc><hp:p><hp:run><hp:t>대학원</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>전공</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>자 격 증</hp:t></hp:run></hp:p></hp:tc>
+      </hp:tr>
+      <hp:tr>
+        <hp:tc><hp:p><hp:run><hp:t>본 용역
+참여 업무</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>본 용역
+참여 기간</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>2026.  .   .
+～ 2027.  .   .</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>참여율</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>%</hp:t></hp:run></hp:p></hp:tc>
+      </hp:tr>
+      <hp:tr><hp:tc><hp:p><hp:run/></hp:p></hp:tc></hp:tr>
+      <hp:tr><hp:tc><hp:p><hp:run><hp:t>경    력    사    항</hp:t></hp:run></hp:p></hp:tc></hp:tr>
+      <hp:tr>
+        <hp:tc><hp:p><hp:run><hp:t>사업명</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>참여기간
+(연월～연월)</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>담당업무</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>근무처</hp:t></hp:run></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run><hp:t>비고</hp:t></hp:run></hp:p></hp:tc>
+      </hp:tr>
+      <hp:tr>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+        <hp:tc><hp:p><hp:run/></hp:p></hp:tc>
+      </hp:tr>
+    </hp:tbl>
+  </hp:p>
+  <hp:p><hp:run><hp:t>상호 또는 법인명 :                   (인)</hp:t></hp:run></hp:p>
+  <hp:p><hp:run><hp:t>【별지 제12호 서식】 행정처분 확인서</hp:t></hp:run></hp:p>
+</hp:sec>
+"""
 
 
 FUZZY_SECTION_XML = """<?xml version="1.0" encoding="UTF-8"?>

@@ -25,7 +25,12 @@ from app.services.form_jobs import (
     write_hwpx_form_job,
 )
 from app.settings import Settings, get_settings
-from core.hwpx.fill import build_cell_fills, build_repeating_fills, fill_hwpx_cells
+from core.hwpx.fill import (
+    build_cell_fills,
+    build_personnel_profile_fills,
+    build_repeating_fills,
+    fill_hwpx_cells,
+)
 from core.hwpx.mapping import infer_label_mappings
 from core.hwpx.read import form_text, read_hwpx
 from core.hwpx.trim import trim_hwpx_to_form_start
@@ -65,6 +70,7 @@ def fill_hwpx_form(
         mappings = infer_label_mappings(document)
         fills, missing = build_cell_fills(mappings, values)
         table_rows, repeated_tables, repeat_missing = build_repeating_fills(document, values)
+        personnel_profiles, profile_missing = build_personnel_profile_fills(document, values)
 
         job_id = str(uuid.uuid4())
         output_filename = f"{job_id}.hwpx"
@@ -75,6 +81,7 @@ def fill_hwpx_form(
             fills,
             table_rows=table_rows,
             repeated_tables=repeated_tables,
+            personnel_profiles=personnel_profiles,
         )
         trim_applied = trim_hwpx_to_form_start(output_path)
         download_url = f"/forms/hwpx/outputs/{output_filename}"
@@ -86,7 +93,7 @@ def fill_hwpx_form(
             output_filename=output_filename,
             download_url=download_url,
             filled=report.filled,
-            missing=missing + repeat_missing,
+            missing=missing + repeat_missing + profile_missing,
             skipped=report.skipped,
             mappings=[mapping.__dict__ for mapping in mappings],
             trim_applied=trim_applied,
@@ -97,7 +104,7 @@ def fill_hwpx_form(
             output_filename=output_filename,
             download_url=download_url,
             filled=report.filled,
-            missing=missing + repeat_missing,
+            missing=missing + repeat_missing + profile_missing,
             skipped=report.skipped,
         )
     except json.JSONDecodeError as exc:

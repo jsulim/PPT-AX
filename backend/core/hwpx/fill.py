@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import zipfile
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -39,6 +40,12 @@ class RepeatedTableFill:
 
 
 @dataclass(frozen=True)
+class PersonnelProfileFill:
+    xml_path: str
+    rows: list[dict[str, str]]
+
+
+@dataclass(frozen=True)
 class HwpxFillReport:
     filled: list[str] = field(default_factory=list)
     missing: list[dict[str, str]] = field(default_factory=list)
@@ -51,6 +58,7 @@ def fill_hwpx_cells(
     fills: list[CellFill],
     table_rows: list[TableRowFill] | None = None,
     repeated_tables: list[RepeatedTableFill] | None = None,
+    personnel_profiles: list[PersonnelProfileFill] | None = None,
 ) -> HwpxFillReport:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fills_by_xml: dict[str, list[CellFill]] = {}
@@ -65,6 +73,9 @@ def fill_hwpx_cells(
     repeated_tables_by_xml: dict[str, list[RepeatedTableFill]] = {}
     for repeat_fill in repeated_tables or []:
         repeated_tables_by_xml.setdefault(repeat_fill.xml_path, []).append(repeat_fill)
+    personnel_profiles_by_xml: dict[str, list[PersonnelProfileFill]] = {}
+    for profile_fill in personnel_profiles or []:
+        personnel_profiles_by_xml.setdefault(profile_fill.xml_path, []).append(profile_fill)
 
     filled: list[str] = []
     skipped: list[dict[str, str]] = []
@@ -77,12 +88,14 @@ def fill_hwpx_cells(
                     info.filename in fills_by_xml
                     or info.filename in table_rows_by_xml
                     or info.filename in repeated_tables_by_xml
+                    or info.filename in personnel_profiles_by_xml
                 ):
                     data, xml_filled, xml_skipped = _fill_xml(
                         data,
                         fills_by_xml.get(info.filename, []),
                         table_rows_by_xml.get(info.filename, []),
                         repeated_tables_by_xml.get(info.filename, []),
+                        personnel_profiles_by_xml.get(info.filename, []),
                     )
                     filled.extend(xml_filled)
                     skipped.extend(xml_skipped)
@@ -176,11 +189,45 @@ def build_repeating_fills(
     return table_rows, repeated_tables, missing
 
 
+def build_personnel_profile_fills(
+    document: HwpxDocument,
+    values: dict[str, object],
+) -> tuple[list[PersonnelProfileFill], list[dict[str, str]]]:
+    personnel = _list_value(values, "personnel") or _list_value(values, "selectedPersonnel")
+    if not personnel:
+        return [], []
+
+    xml_path = _find_personnel_profile_xml_path(document)
+    if xml_path is None:
+        return [], [
+            {
+                "field_key": "personnel.profiles",
+                "cell_ref": "",
+                "message": "참여인력 이력사항 서식을 찾지 못했습니다.",
+            }
+        ]
+
+    rows = [_personnel_profile_values(item, values) for item in personnel]
+    missing: list[dict[str, str]] = []
+    for index, item in enumerate(personnel):
+        for field_key in ("name", "dept", "position", "career"):
+            if _record_value(item, field_key, index) in {None, ""}:
+                missing.append(
+                    {
+                        "field_key": f"personnel.{field_key}",
+                        "cell_ref": f"{xml_path}:personnel_profile:{index}",
+                        "message": "참여인력 이력사항에 채울 데이터가 없습니다.",
+                    }
+                )
+    return [PersonnelProfileFill(xml_path=xml_path, rows=rows)], missing
+
+
 def _fill_xml(
     data: bytes,
     fills: list[CellFill],
     table_rows: list[TableRowFill],
     repeated_tables: list[RepeatedTableFill],
+    personnel_profiles: list[PersonnelProfileFill],
 ) -> tuple[bytes, list[str], list[dict[str, str]]]:
     parser = LET.XMLParser(remove_blank_text=False, resolve_entities=False, huge_tree=True)
     root = LET.fromstring(data, parser=parser)
@@ -192,6 +239,12 @@ def _fill_xml(
         table_filled, table_skipped = _apply_repeated_table(root, tables, repeat_fill)
         filled.extend(table_filled)
         skipped.extend(table_skipped)
+
+    for profile_fill in personnel_profiles:
+        profile_filled, profile_skipped = _apply_personnel_profiles(root, profile_fill)
+        filled.extend(profile_filled)
+        skipped.extend(profile_skipped)
+        tables = _iter_local(root, "tbl")
 
     for row_fill in sorted(table_rows, key=lambda item: item.table_index, reverse=True):
         table_filled, table_skipped = _apply_table_rows(tables, row_fill)
@@ -318,6 +371,169 @@ def _apply_repeated_table(
             f"personnel.repeat@{table_fill.xml_path}:tbl{table_fill.table_index}:repeat0"
         )
     return filled, []
+
+
+def _apply_personnel_profiles(
+    root: Any,
+    profile_fill: PersonnelProfileFill,
+) -> tuple[list[str], list[dict[str, str]]]:
+    if not profile_fill.rows:
+        return [], []
+
+    block_range = _find_personnel_profile_block(root)
+    if block_range is None:
+        return [], [{"field_key": "personnel.profiles", "reason": "profile_block_not_found"}]
+
+    start, end = block_range
+    children = list(root)
+    template_block = children[start:end]
+    if not template_block:
+        return [], [{"field_key": "personnel.profiles", "reason": "profile_block_empty"}]
+
+    insert_at = end
+    blocks: list[list[Any]] = [template_block]
+    for _item_index in range(1, len(profile_fill.rows)):
+        block = [deepcopy(element) for element in template_block]
+        for offset, element in enumerate(block):
+            root.insert(insert_at + offset, element)
+        insert_at += len(block)
+        blocks.append(block)
+
+    filled: list[str] = []
+    skipped: list[dict[str, str]] = []
+    for item_index, values in enumerate(profile_fill.rows):
+        block_filled, block_skipped = _fill_personnel_profile_block(
+            blocks[item_index],
+            values,
+            item_index,
+        )
+        filled.extend(block_filled)
+        skipped.extend(block_skipped)
+    return filled, skipped
+
+
+def _fill_personnel_profile_block(
+    block: list[Any],
+    values: dict[str, str],
+    item_index: int,
+) -> tuple[list[str], list[dict[str, str]]]:
+    tables = [element for element in _iter_block_local(block, "tbl")]
+    table = next(
+        (candidate for candidate in tables if _is_personnel_profile_table(candidate)),
+        None,
+    )
+    if table is None:
+        return [], [{"field_key": "personnel.profile", "reason": "profile_table_not_found"}]
+
+    filled: list[str] = []
+    skipped: list[dict[str, str]] = []
+
+    def put(row_index: int, col_index: int, field_key: str) -> None:
+        try:
+            row = _children_local(table, "tr")[row_index]
+            cell = _children_local(row, "tc")[col_index]
+        except IndexError:
+            skipped.append(
+                {
+                    "field_key": f"personnel.{field_key}",
+                    "row": str(row_index),
+                    "col": str(col_index),
+                    "reason": "cell_not_found",
+                }
+            )
+            return
+        value = values.get(field_key)
+        if not value and field_key in PERSONNEL_PROFILE_REQUIRED_FIELDS:
+            value = f"[확인 필요: personnel.{field_key}]"
+        elif not value:
+            value = ""
+        if _replace_text(cell, value):
+            filled.append(f"personnel.{field_key}@profile:{item_index}:r{row_index}:c{col_index}")
+        else:
+            skipped.append(
+                {
+                    "field_key": f"personnel.{field_key}",
+                    "row": str(row_index),
+                    "col": str(col_index),
+                    "reason": "text_node_not_found",
+                }
+            )
+
+    put(0, 1, "name")
+    put(0, 3, "dept")
+    put(1, 1, "age")
+    put(1, 3, "position")
+    put(2, 1, "eduSchool")
+    put(2, 2, "eduMajor")
+    put(2, 4, "career")
+    put(3, 1, "gradSchool")
+    put(3, 2, "gradMajor")
+    put(3, 3, "certifications")
+    put(4, 1, "role")
+    put(4, 3, "period")
+    put(4, 5, "participationRate")
+
+    career_rows = values.get("careerRows")
+    if career_rows:
+        _replace_text(_children_local(_children_local(table, "tr")[8], "tc")[0], career_rows)
+        filled.append(f"personnel.careerRows@profile:{item_index}:r8")
+
+    company_name = values.get("companyName")
+    if company_name:
+        signature = next(
+            (
+                element
+                for element in block
+                if "상호 또는 법인명" in _text_of(element)
+            ),
+            None,
+        )
+        if signature is not None:
+            _replace_text(signature, f"상호 또는 법인명 : {company_name}                 (인)")
+            filled.append(f"personnel.companyName@profile:{item_index}:signature")
+
+    return filled, skipped
+
+
+def _find_personnel_profile_block(root: Any) -> tuple[int, int] | None:
+    children = list(root)
+    start: int | None = None
+    for index, child in enumerate(children):
+        text = _text_of(child)
+        if "별지 제11호" in text and "참여인력 이력사항" in text:
+            start = index
+            break
+    if start is None:
+        for index, child in enumerate(children):
+            text = _text_of(child)
+            if text.strip() == "참여인력 이력사항":
+                start = index
+                break
+    if start is None:
+        return None
+
+    end = len(children)
+    for index in range(start + 1, len(children)):
+        text = _text_of(children[index])
+        if re.search(r"별지\s*제\s*12\s*호", text) or "행정처분 확인서" in text:
+            end = index
+            break
+    while end > start and not _text_of(children[end - 1]).strip():
+        end -= 1
+    return start, end
+
+
+def _is_personnel_profile_table(table: Any) -> bool:
+    text = _normalize(_text_of(table))
+    return all(
+        keyword in text
+        for keyword in (
+            _normalize("성 명"),
+            _normalize("소 속"),
+            _normalize("경력사항"),
+            _normalize("참여 업무"),
+        )
+    )
 
 
 def _fill_label_value_table(table: Any, values: dict[str, str]) -> None:
@@ -525,6 +741,54 @@ def _personnel_consent_values(item: dict[str, object]) -> dict[str, str]:
     }
 
 
+def _personnel_profile_values(
+    item: dict[str, object],
+    values: dict[str, object],
+) -> dict[str, str]:
+    company = values.get("company")
+    company_name = ""
+    if isinstance(company, dict):
+        company_name = str(company.get("name") or "")
+    return {
+        "name": str(_record_value(item, "name", 0) or ""),
+        "dept": str(_record_value(item, "dept", 0) or ""),
+        "age": str(_record_value(item, "age", 0) or ""),
+        "position": str(_record_value(item, "position", 0) or ""),
+        "eduSchool": str(_record_value(item, "eduSchool", 0) or ""),
+        "eduMajor": str(_record_value(item, "eduMajor", 0) or ""),
+        "career": str(_record_value(item, "career", 0) or ""),
+        "gradSchool": str(_record_value(item, "gradSchool", 0) or ""),
+        "gradMajor": str(_record_value(item, "gradMajor", 0) or ""),
+        "certifications": str(_record_value(item, "certifications", 0) or ""),
+        "role": str(_record_value(item, "role", 0) or _record_value(item, "position", 0) or ""),
+        "period": str(_record_value(item, "participationPeriod", 0) or ""),
+        "participationRate": str(_record_value(item, "participationRate", 0) or ""),
+        "careerRows": _personnel_career_rows(item),
+        "companyName": company_name,
+    }
+
+
+def _personnel_career_rows(item: dict[str, object]) -> str:
+    careers = item.get("careers") or item.get("careerRows") or item.get("projects")
+    if not isinstance(careers, list):
+        return ""
+    lines: list[str] = []
+    for career in careers:
+        if not isinstance(career, dict):
+            continue
+        parts = [
+            str(career.get("taskName") or career.get("projectName") or career.get("name") or ""),
+            str(career.get("period") or career.get("participationPeriod") or ""),
+            str(career.get("role") or career.get("task") or ""),
+            str(career.get("org") or career.get("client") or career.get("workplace") or ""),
+            str(career.get("note") or ""),
+        ]
+        line = " / ".join(part for part in parts if part)
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
+
+
 def _record_value(item: dict[str, object], field_key: str, index: int) -> object | None:
     if field_key == "no":
         return index + 1
@@ -568,6 +832,23 @@ def _cell_text(cell: object) -> str:
 def _text_of(root: Any) -> str:
     texts = [element.text or "" for element in root.iter() if _local_name(element.tag) == "t"]
     return "\n".join(text.strip() for text in texts if text and text.strip()).strip()
+
+
+def _iter_block_local(block: Sequence[Any], name: str) -> list[Any]:
+    return [
+        element
+        for root in block
+        for element in root.iter()
+        if _local_name(element.tag) == name
+    ]
+
+
+def _find_personnel_profile_xml_path(document: HwpxDocument) -> str | None:
+    for table in document.tables:
+        text = "\n".join(cell.text for row in table.rows for cell in row)
+        if all(keyword in text for keyword in ("성 명", "소 속", "경    력    사    항")):
+            return table.xml_path
+    return None
 
 
 def _find_parent(root: Any, target: Any) -> Any | None:
@@ -656,6 +937,16 @@ CONSENT_KEYWORDS: tuple[str, ...] = (
     "청렴서약",
 )
 
+PERSONNEL_PROFILE_REQUIRED_FIELDS: set[str] = {
+    "name",
+    "dept",
+    "position",
+    "career",
+    "role",
+    "period",
+    "participationRate",
+}
+
 RECORD_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "no": ("no",),
     "taskName": ("taskName", "name", "projectName", "title"),
@@ -667,12 +958,19 @@ RECORD_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "desc": ("desc", "description", "summary"),
     "name": ("name",),
     "dept": ("dept", "department"),
-    "position": ("position", "role"),
+    "position": ("position", "role", "title"),
+    "age": ("age",),
     "career": ("career", "careerPeriod"),
     "joinDate": ("joinDate",),
     "eduSchool": ("eduSchool", "school"),
     "eduMajor": ("eduMajor", "major"),
     "eduDegree": ("eduDegree", "degree", "education"),
+    "gradSchool": ("gradSchool", "graduateSchool"),
+    "gradMajor": ("gradMajor", "graduateMajor"),
+    "certifications": ("certifications", "certificate", "certificates", "license"),
+    "role": ("role", "task", "assignedTask", "duty"),
+    "participationPeriod": ("participationPeriod", "period"),
+    "participationRate": ("participationRate", "rate"),
     "birth": ("birth", "birthDate", "birthday"),
     "phone": ("phone", "mobile"),
     "email": ("email",),
